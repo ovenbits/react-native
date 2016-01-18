@@ -18,15 +18,24 @@ const path = require('path');
 const ReactPackager = require('./react-packager');
 const resolvePlugins = require('./react-packager/src/JSTransformer/resolvePlugins');
 
-const babelRC =
-  json5.parse(
+
+const projectBabelRCPath = path.resolve(__dirname, '..', '..', '..', '.babelrc');
+
+let babelRC = { plugins: [] };
+
+// If a babelrc exists in the project,
+// don't use the one provided with react-native.
+if (!fs.existsSync(projectBabelRCPath)) {
+  babelRC = json5.parse(
     fs.readFileSync(
-      path.resolve(__dirname, 'react-packager', '.babelrc')));
+      path.resolve(__dirname, 'react-packager', '.babelrc.json')));
+}
 
-function transform(src, filename, options) {
-  options = options || {};
-
-  const extraPlugins = ['external-helpers-2'];
+/**
+ * Given a filename and options, build a Babel
+ * config object with the appropriate plugins.
+ */
+function buildBabelConfig(filename, options) {
   const extraConfig = {
     filename,
     sourceFileName: filename,
@@ -34,12 +43,22 @@ function transform(src, filename, options) {
 
   const config = Object.assign({}, babelRC, extraConfig);
 
+  // Add extra plugins
+  const extraPlugins = [require('babel-plugin-external-helpers')];
+
   if (options.inlineRequires) {
     extraPlugins.push(inlineRequires);
   }
   config.plugins = resolvePlugins(extraPlugins.concat(config.plugins));
 
-  const result = babel.transform(src, Object.assign({}, babelRC, config));
+  return Object.assign({}, babelRC, extraConfig);
+}
+
+function transform(src, filename, options) {
+  options = options || {};
+
+  const babelConfig = buildBabelConfig(filename, options);
+  const result = babel.transform(src, babelConfig);
 
   return {
     code: result.code,
